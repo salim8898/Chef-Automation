@@ -1,0 +1,118 @@
+pipeline { 
+   agent {label 'chef'} 
+     stages { 
+     	stage('Install_terraform') {
+		steps {
+			sh "cd /tmp"
+			sh "curl -o terraform.zip https://releases.hashicorp.com/terraform/0.12.8/terraform_0.12.8_linux_amd64.zip"
+			sh "unzip terraform.zip"
+			sh "sudo mv terraform /usr/bin"
+			sh "sudo rm -rf terraform.zip"
+			sh "sudo rm -rf *.tf*"
+			sh "sudo rm -rf /tmp/public_ips.txt"
+			sh "sudo rm -rf terraform_Jenkins"
+			}
+		}
+	stage('Git Clone Terraform TF Files')
+	{
+		steps{
+			sh "git clone https://github.com/salim8898/terraform_Jenkins.git"
+			sh "mv terraform_Jenkins/* $WORKSPACE"
+			sh "ls -al"
+		}
+	}
+      	stage('Terrafrom Init'){ 
+         	steps { 
+                     sh "terraform init"                  
+             	} 
+         }
+	 stage('Terraform Plan'){ 
+              steps { 
+		     sh "terraform plan -out terraform.tfplan"
+		     
+             } 
+         }
+	 stage ('Terraform Apply'){
+	 	steps{
+		     sh "terraform apply terraform.tfplan"
+		}
+	 }
+	 stage ('Terraform Show output in console'){
+	 	steps{
+		     sh "terraform show"
+		}
+	 }
+	 stage('Setup ChefWorkstation') {
+            steps {
+                script {
+                    def cdkExists = fileExists '/usr/bin/chef-client'
+                    if (cdkExists) {
+                        echo 'Pakckage already exist...Skipping installation'
+                    }else{
+			sh 'wget https://packages.chef.io/files/stable/chef-workstation/0.8.7/ubuntu/18.04/chef-workstation_0.8.7-1_amd64.deb'
+			sh 'sudo dpkg -i chef-workstation_0.8.7-1_amd64.deb'
+                    }
+                }
+            }
+        }
+	stage('Clone Tomcat from GIT') {
+            steps {
+                git credentialsId: 'github-creds', url: 'https://github.com/salim8898/tomcat.git'
+            }
+        }
+	stage('Maven Generate WAR') {
+            steps {
+                sh 'mvn clean package'
+            }
+	}
+	stage('Nexus Upload WAR') {
+            steps {
+                script {
+                    pom = readMavenPom file: "pom.xml";
+                    filesByGlob = findFiles(glob: "target/*.${pom.packaging}");
+                    artifactPath = filesByGlob[0].path;
+                    nexusArtifactUploader(
+                        nexusVersion: "nexus3",
+                        protocol: "http",
+                        nexusUrl: "salimnexus-1731739187.us-east-1.elb.amazonaws.com",
+                        groupId: pom.groupId,
+                        version: pom.version,
+                        repository: "tomcat",
+                        credentialsId: "nexus3_creds",
+                        artifacts: [
+                            [artifactId: pom.artifactId,
+                            classifier: '',
+                            file: artifactPath,
+                            type: pom.packaging],
+                        ]
+                     );
+                    
+                }
+            }
+        }
+	 stage ('Get IP_ Upload cookbook_ Bootstrap node'){
+                environment {
+                     AWS = sh(script: 'cat /tmp/public_ips.txt', , returnStdout: true).trim()
+                }
+		steps {
+		      sh "echo this is my server IP reading from varaible AWS: $AWS"
+		      withCredentials([file(credentialsId: 'chef-server-creds', variable: 'CHEFKIT')]) {
+					sh 'ls -al $CHEFKIT'
+					sh 'sudo unzip -o $CHEFKIT'
+					sh 'ls $WORKSPACE'
+					sh 'sudo rm -rf /chef-repo'
+					sh 'sudo mv $WORKSPACE/chef-repo /'
+					sh 'sudo mkdir -p /chef-repo/cookbooks/tomcat'
+					sh 'sudo mv $WORKSPACE/* /chef-repo/cookbooks/tomcat'
+                    sh "sudo knife cookbook upload tomcat --force -o /chef-repo/cookbooks -c /chef-repo/.chef/knife.rb"
+                    withCredentials([sshUserPrivateKey(credentialsId: 'client-creds', keyFileVariable: 'AGENT_SSHKEY', passphraseVariable: '', usernameVariable: '')]) {
+                        sh "knife bootstrap $AWS -x ubuntu -i $AGENT_SSHKEY -N $AWS --sudo --run-list 'recipe[tomcat]' --chef-license accept-silent -y -c /chef-repo/.chef/knife.rb"
+                    }
+                    
+               	 }
+	    }
+
+	}
+
+    }
+}

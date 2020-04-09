@@ -1,0 +1,33 @@
+.vagrant
+*~
+*#
+.#*
+\#*#
+.*.sw[a-z]
+*.un~
+
+# Bundler
+Gemfile.lock
+gems.locked
+bin/*
+.bundle/*
+
+# test kitchen
+.kitchen/
+kitchen.local.yml
+knife.rb
+client.rb
+
+# Chef
+Berksfile.lock
+.zero-knife.rb
+Policyfile.lock.json
+
+# Terrafrom
+*.tfstate.*
+
+# Passwords
+*password*
+*.pem
+*.ppk
+

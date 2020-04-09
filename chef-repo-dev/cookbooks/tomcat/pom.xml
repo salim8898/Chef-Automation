@@ -1,0 +1,28 @@
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+  <groupId>com.jenkins.demo</groupId>
+  <artifactId>JenkinsWar1</artifactId>
+  <packaging>war</packaging>
+  <version>0.02</version>
+  <name>JenkinsWar Maven Webapp</name>
+  <url>http://maven.apache.org</url>
+  <repositories>
+	  <repository>
+		  <id>releases</id>
+		  <name>Releases</name>
+		  <url>http://salimnexus-1731739187.us-east-1.elb.amazonaws.com/repository/tomcat/</url>
+	  </repository>
+  </repositories>
+  <dependencies>
+    <dependency>
+      <groupId>junit</groupId>
+      <artifactId>junit</artifactId>
+      <version>3.8.1</version>
+      <scope>test</scope>
+    </dependency>
+  </dependencies>
+  <build>
+    <finalName>JenkinsWar</finalName>
+  </build>
+</project>

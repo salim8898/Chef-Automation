@@ -1,0 +1,46 @@
+pipeline {
+    agent { label "chef"}
+	stages {
+		stage('Message Block') {
+			steps {
+				sh 'echo Initiating Rollback Job'
+			}
+		}
+        stage('Setup ChefWorkstation') {
+            steps {
+                script {
+                    def cdkExists = fileExists '/usr/bin/chef-client'
+                    if (cdkExists) {
+                        echo 'Pakckage already exist...Skipping installation'
+                    }else{
+			sh 'wget https://packages.chef.io/files/stable/chef-workstation/0.8.7/ubuntu/18.04/chef-workstation_0.8.7-1_amd64.deb'
+			sh 'sudo dpkg -i chef-workstation_0.8.7-1_amd64.deb'
+                    }
+                }
+            }
+        }
+        stage('Git Clone Changed Tomcat Repo') {
+            steps {
+                git credentialsId: 'github-creds', url: 'https://github.com/salim8898/tomcat.git'
+            }
+        }
+        stage('Chef Upload Tomcat_ Chef Converge Client') {
+            steps {
+                withCredentials([file(credentialsId: 'chef-server-creds', variable: 'CHEFKIT')]) {
+					sh 'ls -al $CHEFKIT'
+					sh 'sudo unzip -o $CHEFKIT'
+					sh 'ls $WORKSPACE'
+					sh 'sudo rm -rf /chef-repo'
+					sh 'sudo mv $WORKSPACE/chef-repo /'
+					sh 'sudo mkdir -p /chef-repo/cookbooks/tomcat'
+					sh 'sudo mv $WORKSPACE/* /chef-repo/cookbooks/tomcat'
+                    sh "sudo knife cookbook upload tomcat --force -o /chef-repo/cookbooks -c /chef-repo/.chef/knife.rb"
+                    withCredentials([sshUserPrivateKey(credentialsId: 'client-creds', keyFileVariable: 'AGENT_SSHKEY', passphraseVariable: '', usernameVariable: '')]) {
+					sh "knife ssh 'name:54.172.151.155' -x ubuntu -i $AGENT_SSHKEY 'sudo chef-client' -c /chef-repo/.chef/knife.rb"
+                    }
+                }
+            }
+        }
+		
+    }
+}

@@ -1,0 +1,52 @@
+def client = "13.233.139.221"
+pipeline {
+    agent { label "chef"}
+	stages {
+		stage('Welcome') {
+			steps {
+				sh 'echo Starting Chef CICD'
+			}
+		}
+        stage('Install ChefWorkstation') {
+            steps {
+                script {
+                    def cdkExists = fileExists '/usr/bin/chef-client'
+                    if (cdkExists) {
+                        echo 'Pakckage already exist...Skipping installation'
+                    }else{
+			sh 'wget https://packages.chef.io/files/stable/chef-workstation/0.8.7/ubuntu/18.04/chef-workstation_0.8.7-1_amd64.deb'
+			sh 'sudo dpkg -i chef-workstation_0.8.7-1_amd64.deb'
+                    }
+                }
+            }
+        }
+        stage('Clone Cookbook from Git') {
+            steps {
+                git credentialsId: 'github-creds', url: 'https://github.com/salim8898/apache.git'
+            }
+        }
+        stage('Inject Chef Starter kit and upload cookbook') {
+            steps {
+                withCredentials([zip(credentialsId: 'chef-server-creds', variable: 'CHEFKIT')]) {
+					sh 'ls -al $CHEFKIT'
+                    sh 'mkdir -p $CHEFKIT/chef-repo/cookbooks/apache'
+					sh 'ls -al $CHEFKIT'
+                    sh 'mv $WORKSPACE/* $CHEFKIT/chef-repo/cookbooks/apache'
+                    sh 'sudo rm -rf /chef-repo'
+                    sh 'sudo mv $CHEFKIT/* /'
+                    sh 'sudo rm -rf $CHEFKIT'
+                    sh "sudo knife cookbook upload apache --force -o /chef-repo/cookbooks -c /chef-repo/.chef/knife.rb"
+                    withCredentials([sshUserPrivateKey(credentialsId: 'client-creds', keyFileVariable: 'AGENT_SSHKEY', passphraseVariable: '', usernameVariable: '')]) {
+                        sh "knife bootstrap ${client} -x ubuntu -i $AGENT_SSHKEY -N ${client} --sudo --run-list 'recipe[apache]' --chef-license accept-silent -y -c /chef-repo/.chef/knife.rb"
+                    }
+                    
+				    sh 'echo build has been finished'
+                    //withCredentials([sshUserPrivateKey(credentialsId: 'agent-creds', keyFileVariable: 'AGENT_SSHKEY', passphraseVariable: '', usernameVariable: '')]) {
+					//	sh "knife ssh 'name:client' -x salim -i $AGENT_SSHKEY 'sudo chef-client' -c $CHEFKIT/chef-repo/.chef/knife.rb"
+                    //}
+                }
+            }
+        }
+		
+    }
+}
